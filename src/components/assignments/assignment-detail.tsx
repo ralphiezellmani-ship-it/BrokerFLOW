@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusStepper } from "./status-stepper";
 import { StatusChangeDialog } from "./status-change-dialog";
 import { AssignmentTimeline } from "./assignment-timeline";
+import { DeleteAssignmentDialog } from "./delete-assignment-dialog";
+import { AuditLogViewer } from "@/components/audit/audit-log-viewer";
 import { UploadDropzone } from "@/components/documents/upload-dropzone";
 import { DocumentList } from "@/components/documents/document-list";
 import { DocumentPreview } from "@/components/documents/document-preview";
@@ -120,12 +122,19 @@ export function AssignmentDetail({
             {assignment.postal_code ? `, ${assignment.postal_code}` : ""}
           </p>
         </div>
-        <StatusChangeDialog
-          assignment={assignment}
-          userId={userId}
-          tenantId={tenantId}
-          onStatusChanged={handleStatusChanged}
-        />
+        <div className="flex items-center gap-2">
+          <DeleteAssignmentDialog
+            assignment={assignment}
+            userId={userId}
+            tenantId={tenantId}
+          />
+          <StatusChangeDialog
+            assignment={assignment}
+            userId={userId}
+            tenantId={tenantId}
+            onStatusChanged={handleStatusChanged}
+          />
+        </div>
       </div>
 
       {/* Status stepper */}
@@ -145,6 +154,7 @@ export function AssignmentDetail({
           <TabsTrigger value="tasks">
             Uppgifter{totalTasks > 0 ? ` (${doneTasks}/${totalTasks})` : ""}
           </TabsTrigger>
+          <TabsTrigger value="audit">Logg</TabsTrigger>
         </TabsList>
 
         {/* Overview tab */}
@@ -364,6 +374,11 @@ export function AssignmentDetail({
             tenantId={tenantId}
             userId={userId}
           />
+        </TabsContent>
+
+        {/* Audit log tab */}
+        <TabsContent value="audit">
+          <AuditLogViewer assignmentId={assignment.id} />
         </TabsContent>
       </Tabs>
 

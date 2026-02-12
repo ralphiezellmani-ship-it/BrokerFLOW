@@ -13,6 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusStepper } from "./status-stepper";
 import { StatusChangeDialog } from "./status-change-dialog";
 import { AssignmentTimeline } from "./assignment-timeline";
+import { UploadDropzone } from "@/components/documents/upload-dropzone";
+import { DocumentList } from "@/components/documents/document-list";
+import { DocumentPreview } from "@/components/documents/document-preview";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { PROPERTY_TYPE_LABELS } from "@/types/assignment";
 import {
@@ -21,6 +24,7 @@ import {
   formatDate,
 } from "@/lib/utils/formatting";
 import type { Assignment } from "@/types/assignment";
+import type { Document } from "@/types/document";
 import type { Database } from "@/types/database";
 import {
   MapPin,
@@ -51,6 +55,10 @@ export function AssignmentDetail({
   const [assignment, setAssignment] = useState(initialAssignment);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const fetchAssignment = useCallback(async () => {
     const supabase = createClient();
@@ -73,9 +81,22 @@ export function AssignmentDetail({
     setLoadingTasks(false);
   }, [assignment.id]);
 
+  const fetchDocuments = useCallback(async () => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("documents")
+      .select("*")
+      .eq("assignment_id", assignment.id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    setDocuments(data || []);
+    setLoadingDocs(false);
+  }, [assignment.id]);
+
   useEffect(() => {
     fetchTasks();
-  }, [fetchTasks]);
+    fetchDocuments();
+  }, [fetchTasks, fetchDocuments]);
 
   async function handleToggleTask(taskId: string, done: boolean) {
     const supabase = createClient();
@@ -249,14 +270,59 @@ export function AssignmentDetail({
 
         {/* Documents tab */}
         <TabsContent value="documents">
-          <Card>
-            <CardHeader className="items-center text-center">
-              <CardTitle>Dokument</CardTitle>
-              <CardDescription>
-                Dokumentcenter implementeras i Epic 4.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Ladda upp dokument</CardTitle>
+                <CardDescription>
+                  Dra och släpp PDF:er eller bilder (mäklarbild, årsredovisning, stadgar m.m.)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <UploadDropzone
+                  assignmentId={assignment.id}
+                  tenantId={tenantId}
+                  userId={userId}
+                  onUploadComplete={fetchDocuments}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Dokument
+                  {documents.length > 0 && (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      ({documents.length})
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingDocs ? (
+                  <LoadingSpinner text="Laddar dokument..." />
+                ) : (
+                  <DocumentList
+                    documents={documents}
+                    tenantId={tenantId}
+                    userId={userId}
+                    onDocumentDeleted={fetchDocuments}
+                    onPreview={(doc) => {
+                      setPreviewDoc(doc);
+                      setPreviewOpen(true);
+                    }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <DocumentPreview
+            document={previewDoc}
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+          />
         </TabsContent>
 
         {/* Data tab */}

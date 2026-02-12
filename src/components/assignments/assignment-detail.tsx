@@ -19,6 +19,7 @@ import { DocumentPreview } from "@/components/documents/document-preview";
 import { ExtractionReview } from "@/components/documents/extraction-review";
 import { GenerationsPanel } from "@/components/generations/generations-panel";
 import { ContractPanel } from "@/components/transactions/contract-panel";
+import { TaskList } from "@/components/tasks/task-list";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { PROPERTY_TYPE_LABELS } from "@/types/assignment";
 import {
@@ -39,7 +40,6 @@ import {
   User,
   Mail,
   Phone,
-  CheckSquare,
 } from "lucide-react";
 
 type TaskRow = Database["public"]["Tables"]["tasks"]["Row"];
@@ -57,7 +57,6 @@ export function AssignmentDetail({
 }: AssignmentDetailProps) {
   const [assignment, setAssignment] = useState(initialAssignment);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
-  const [loadingTasks, setLoadingTasks] = useState(true);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
@@ -81,7 +80,6 @@ export function AssignmentDetail({
       .eq("assignment_id", assignment.id)
       .order("sort_order", { ascending: true });
     setTasks(data || []);
-    setLoadingTasks(false);
   }, [assignment.id]);
 
   const fetchDocuments = useCallback(async () => {
@@ -100,18 +98,6 @@ export function AssignmentDetail({
     fetchTasks();
     fetchDocuments();
   }, [fetchTasks, fetchDocuments]);
-
-  async function handleToggleTask(taskId: string, done: boolean) {
-    const supabase = createClient();
-    await supabase
-      .from("tasks")
-      .update({
-        status: done ? "done" : "todo",
-        completed_at: done ? new Date().toISOString() : null,
-      })
-      .eq("id", taskId);
-    await fetchTasks();
-  }
 
   function handleStatusChanged() {
     fetchAssignment();
@@ -373,77 +359,11 @@ export function AssignmentDetail({
 
         {/* Tasks tab */}
         <TabsContent value="tasks">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Uppgifter
-                {totalTasks > 0 && (
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">
-                    {doneTasks} av {totalTasks} klara
-                  </span>
-                )}
-              </CardTitle>
-              {totalTasks > 0 && (
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{
-                      width: `${(doneTasks / totalTasks) * 100}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </CardHeader>
-            <CardContent>
-              {loadingTasks ? (
-                <LoadingSpinner text="Laddar uppgifter..." />
-              ) : tasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Inga uppgifter ännu. Uppgifter skapas automatiskt vid
-                  statusändringar.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {tasks.map((task) => (
-                    <label
-                      key={task.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2 hover:bg-muted/50"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={task.status === "done"}
-                        onChange={(e) =>
-                          handleToggleTask(task.id, e.target.checked)
-                        }
-                        className="mt-0.5 h-4 w-4 rounded border-input accent-primary"
-                      />
-                      <div className="flex-1">
-                        <span
-                          className={
-                            task.status === "done"
-                              ? "text-sm text-muted-foreground line-through"
-                              : "text-sm"
-                          }
-                        >
-                          {task.title}
-                        </span>
-                        {task.due_date && (
-                          <p className="text-xs text-muted-foreground">
-                            Deadline: {formatDate(task.due_date)}
-                          </p>
-                        )}
-                      </div>
-                      {task.category && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                          {task.category}
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <TaskList
+            assignmentId={assignment.id}
+            tenantId={tenantId}
+            userId={userId}
+          />
         </TabsContent>
       </Tabs>
 

@@ -55,6 +55,28 @@ export default async function DashboardPage() {
   const upcomingDeadlines = deadlinesRes.count || 0;
   const recentAssignments = recentRes.data || [];
 
+  // Fetch task progress per recent assignment
+  const taskProgressMap: Record<string, { done: number; total: number }> = {};
+  if (recentAssignments.length > 0) {
+    const assignmentIds = recentAssignments.map((a) => a.id);
+    const { data: allTasks } = await supabase
+      .from("tasks")
+      .select("assignment_id, status")
+      .in("assignment_id", assignmentIds);
+
+    if (allTasks) {
+      for (const task of allTasks) {
+        if (!taskProgressMap[task.assignment_id]) {
+          taskProgressMap[task.assignment_id] = { done: 0, total: 0 };
+        }
+        taskProgressMap[task.assignment_id].total++;
+        if (task.status === "done") {
+          taskProgressMap[task.assignment_id].done++;
+        }
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -128,7 +150,11 @@ export default async function DashboardPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {recentAssignments.map((assignment) => (
-              <AssignmentCard key={assignment.id} assignment={assignment} />
+              <AssignmentCard
+                key={assignment.id}
+                assignment={assignment}
+                taskProgress={taskProgressMap[assignment.id] || null}
+              />
             ))}
           </div>
         </div>

@@ -79,11 +79,13 @@ export default function OnboardingPage() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
 
-    const { data: tenant, error: tenantError } = await supabase
+    // Generate tenant ID client-side to avoid needing a SELECT policy
+    // (auth.tenant_id() returns NULL before user row exists, so .select() fails)
+    const newTenantId = crypto.randomUUID();
+
+    const { error: tenantError } = await supabase
       .from("tenants")
-      .insert({ name: tenantName, slug })
-      .select()
-      .single();
+      .insert({ id: newTenantId, name: tenantName, slug });
 
     if (tenantError) {
       setError("Kunde inte skapa organisation: " + tenantError.message);
@@ -97,39 +99,39 @@ export default function OnboardingPage() {
 
     const { error: userError } = await supabase.from("users").insert({
       id: user.id,
-      tenant_id: tenant.id,
+      tenant_id: newTenantId,
       role: "admin",
       full_name: name || "Användare",
       email: user.email!,
     });
 
     if (userError) {
-      await supabase.from("tenants").delete().eq("id", tenant.id);
+      await supabase.from("tenants").delete().eq("id", newTenantId);
       setError("Kunde inte skapa användarprofil: " + userError.message);
       setLoading(false);
       return;
     }
 
-    // Create defaults
-    await supabase.from("tenant_preferences").insert({ tenant_id: tenant.id });
+    // Create defaults (user row now exists, so auth.tenant_id() works)
+    await supabase.from("tenant_preferences").insert({ tenant_id: newTenantId });
 
     const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
     await supabase.from("inbound_aliases").insert({
-      tenant_id: tenant.id,
+      tenant_id: newTenantId,
       email_alias: `kontoret+${token}`,
       secret_token: crypto.randomUUID(),
     });
 
     await createAuditLog(supabase, {
-      tenantId: tenant.id,
+      tenantId: newTenantId,
       actorUserId: user.id,
       action: "tenant.settings_changed",
       entityType: "tenant",
-      entityId: tenant.id,
+      entityId: newTenantId,
       metadata: { event: "tenant_created", tenant_name: tenantName },
     });
 
-    setTenantId(tenant.id);
+    setTenantId(newTenantId);
     setUserId(user.id);
     setFullName(name);
     setLoading(false);

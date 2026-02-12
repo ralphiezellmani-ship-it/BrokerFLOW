@@ -17,6 +17,7 @@ import { UploadDropzone } from "@/components/documents/upload-dropzone";
 import { DocumentList } from "@/components/documents/document-list";
 import { DocumentPreview } from "@/components/documents/document-preview";
 import { ExtractionReview } from "@/components/documents/extraction-review";
+import { GenerationsPanel } from "@/components/generations/generations-panel";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { PROPERTY_TYPE_LABELS } from "@/types/assignment";
 import {
@@ -341,14 +342,11 @@ export function AssignmentDetail({
 
         {/* Drafts tab */}
         <TabsContent value="drafts">
-          <Card>
-            <CardHeader className="items-center text-center">
-              <CardTitle>AI-genererade utkast</CardTitle>
-              <CardDescription>
-                Annonstext- och e-postgenerering implementeras i Epic 6.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <GenerationsPanel
+            assignmentId={assignment.id}
+            tenantId={tenantId}
+            userId={userId}
+          />
         </TabsContent>
 
         {/* Tasks tab */}

@@ -16,6 +16,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { useTenant } from "@/hooks/use-tenant";
+import { createAuditLog } from "@/lib/audit/log";
+import { DeleteTenantData } from "@/components/settings/delete-tenant-data";
 import { AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
 
 export default function RetentionPage() {
@@ -53,13 +55,13 @@ export default function RetentionPage() {
     if (updateError) {
       setError("Kunde inte spara: " + updateError.message);
     } else {
-      await supabase.from("audit_logs").insert({
-        tenant_id: tenant.id,
-        actor_user_id: user.id,
+      await createAuditLog(supabase, {
+        tenantId: tenant.id,
+        actorUserId: user.id,
         action: "tenant.settings_changed",
-        entity_type: "tenant",
-        entity_id: tenant.id,
-        metadata_json: {
+        entityType: "tenant",
+        entityId: tenant.id,
+        metadata: {
           field: "retention",
           retention_raw_days: rawDays,
           retention_derived_days: derivedDays,
@@ -178,6 +180,11 @@ export default function RetentionPage() {
           )}
         </form>
       </Card>
+
+      {/* Tenant data deletion — Issue 9.6 */}
+      {tenant && (
+        <DeleteTenantData tenantName={tenant.name} isAdmin={isAdmin} />
+      )}
     </div>
   );
 }

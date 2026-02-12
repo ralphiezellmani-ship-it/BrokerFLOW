@@ -18,6 +18,7 @@ import { DocumentList } from "@/components/documents/document-list";
 import { DocumentPreview } from "@/components/documents/document-preview";
 import { ExtractionReview } from "@/components/documents/extraction-review";
 import { GenerationsPanel } from "@/components/generations/generations-panel";
+import { ContractPanel } from "@/components/transactions/contract-panel";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { PROPERTY_TYPE_LABELS } from "@/types/assignment";
 import {
@@ -151,6 +152,10 @@ export function AssignmentDetail({
           <TabsTrigger value="documents">Dokument</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="drafts">Utkast</TabsTrigger>
+          {(assignment.status === "under_contract" ||
+            assignment.status === "closed") && (
+            <TabsTrigger value="transaction">Transaktion</TabsTrigger>
+          )}
           <TabsTrigger value="tasks">
             Uppgifter{totalTasks > 0 ? ` (${doneTasks}/${totalTasks})` : ""}
           </TabsTrigger>
@@ -348,6 +353,23 @@ export function AssignmentDetail({
             userId={userId}
           />
         </TabsContent>
+
+        {/* Transaction tab */}
+        {(assignment.status === "under_contract" ||
+          assignment.status === "closed") && (
+          <TabsContent value="transaction">
+            <ContractPanel
+              assignmentId={assignment.id}
+              tenantId={tenantId}
+              userId={userId}
+              documents={documents}
+              onAssignmentUpdated={() => {
+                fetchAssignment();
+                fetchTasks();
+              }}
+            />
+          </TabsContent>
+        )}
 
         {/* Tasks tab */}
         <TabsContent value="tasks">

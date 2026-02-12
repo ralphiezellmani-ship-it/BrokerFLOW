@@ -16,6 +16,7 @@ import { AssignmentTimeline } from "./assignment-timeline";
 import { UploadDropzone } from "@/components/documents/upload-dropzone";
 import { DocumentList } from "@/components/documents/document-list";
 import { DocumentPreview } from "@/components/documents/document-preview";
+import { ExtractionReview } from "@/components/documents/extraction-review";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { PROPERTY_TYPE_LABELS } from "@/types/assignment";
 import {
@@ -327,14 +328,15 @@ export function AssignmentDetail({
 
         {/* Data tab */}
         <TabsContent value="data">
-          <Card>
-            <CardHeader className="items-center text-center">
-              <CardTitle>Extraherad data</CardTitle>
-              <CardDescription>
-                Extraktionspipeline implementeras i Epic 5.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <ExtractionReview
+            assignmentId={assignment.id}
+            tenantId={tenantId}
+            userId={userId}
+            documents={documents}
+            onDataConfirmed={() => {
+              fetchAssignment();
+            }}
+          />
         </TabsContent>
 
         {/* Drafts tab */}

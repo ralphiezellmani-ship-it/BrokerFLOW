@@ -46,7 +46,7 @@ export default function RegisterPage() {
     const supabase = createClient();
     const siteUrl =
       process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -63,6 +63,13 @@ export default function RegisterPage() {
       return;
     }
 
+    // If session exists (email confirmation disabled), go straight to onboarding
+    if (data.session) {
+      window.location.href = "/onboarding";
+      return;
+    }
+
+    // Otherwise show "check your email" message
     setSuccess(true);
     setLoading(false);
   }

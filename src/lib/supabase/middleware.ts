@@ -70,11 +70,11 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // Onboarding: only require auth, no database queries
+  // Onboarding: ALWAYS pass through. No auth check, no redirects.
+  // The page handles all auth/redirect logic client-side to avoid
+  // ERR_TOO_MANY_REDIRECTS caused by cookie propagation issues
+  // between server-side middleware and client-side auth.
   if (isOnboarding) {
-    if (!user) {
-      return redirectTo("/login");
-    }
     return supabaseResponse;
   }
 

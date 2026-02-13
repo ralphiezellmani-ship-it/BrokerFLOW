@@ -72,21 +72,19 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ----- AUTH PAGES (login/register) -----
-  if (isAuthPage) {
-    if (user) {
-      // Already logged in → send to dashboard (login page handles onboarding check)
-      return redirectTo("/dashboard");
-    }
-    return supabaseResponse;
-  }
-
-  // ----- ALL OTHER PROTECTED ROUTES (dashboard, assignments, settings, etc.) -----
+  // ----- NOT LOGGED IN -----
   if (!user) {
+    // Auth pages: allow through
+    if (isAuthPage) {
+      return supabaseResponse;
+    }
+    // Everything else: redirect to login
     return redirectTo("/login");
   }
 
-  // Check if user has completed onboarding (has a profile with tenant)
+  // ----- LOGGED IN: check if user has completed onboarding -----
+  // Single DB query used for both auth pages and protected routes
+  let hasProfile = false;
   try {
     const { data: profile } = await supabase
       .from("users")
@@ -94,11 +92,19 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!profile?.tenant_id) {
-      return redirectTo("/onboarding");
-    }
+    hasProfile = !!profile?.tenant_id;
   } catch {
-    // If DB query fails, send to onboarding as safe fallback
+    // DB query failed — assume not onboarded
+    hasProfile = false;
+  }
+
+  // Auth pages (login/register): redirect logged-in users to the right place
+  if (isAuthPage) {
+    return redirectTo(hasProfile ? "/dashboard" : "/onboarding");
+  }
+
+  // Protected routes: ensure user has completed onboarding
+  if (!hasProfile) {
     return redirectTo("/onboarding");
   }
 

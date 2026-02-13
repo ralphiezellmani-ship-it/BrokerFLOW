@@ -90,7 +90,20 @@ export default function RegisterPage() {
       return;
     }
 
-    // Otherwise show "check your email" message
+    // No session returned — either email confirmation is required,
+    // or the account was just created without auto-login.
+    // Try signing in immediately to handle both cases.
+    const { data: signInData } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInData.session) {
+      window.location.href = "/onboarding";
+      return;
+    }
+
+    // If sign-in also fails, email confirmation is genuinely required
     setSuccess(true);
     setLoading(false);
   }

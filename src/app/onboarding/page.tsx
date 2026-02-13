@@ -24,8 +24,11 @@ import {
   FileText,
   CheckCircle2,
   ArrowRight,
+  LogIn,
+  RefreshCw,
 } from "lucide-react";
 
+type PageState = "loading" | "ready" | "error" | "no-session";
 type Step = "org" | "profile" | "first-assignment";
 
 const STEPS: {
@@ -39,7 +42,8 @@ const STEPS: {
 ];
 
 export default function OnboardingPage() {
-  const [ready, setReady] = useState(false);
+  const [pageState, setPageState] = useState<PageState>("loading");
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [step, setStep] = useState<Step>("org");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,40 +65,89 @@ export default function OnboardingPage() {
 
   // Client-side auth + tenant check on mount
   useEffect(() => {
-    const supabase = createClient();
+    let cancelled = false;
 
     async function checkAuth() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const supabase = createClient();
 
-      if (!user) {
-        // Not authenticated — go to login
-        window.location.href = "/login";
-        return;
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (cancelled) return;
+
+        if (authError) {
+          console.error("[onboarding] Auth error:", authError.message);
+          setErrorMessage(`Autentiseringsfel: ${authError.message}`);
+          setPageState("error");
+          return;
+        }
+
+        if (!user) {
+          // No session — show a message with login link (don't auto-redirect
+          // to avoid potential redirect loops)
+          setPageState("no-session");
+          return;
+        }
+
+        // Check if user already has a tenant (already onboarded)
+        const { data: profile, error: profileError } = await supabase
+          .from("users")
+          .select("tenant_id")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (profileError) {
+          console.error("[onboarding] Profile check error:", profileError.message);
+          // Don't treat this as fatal — the user might just not have a profile yet
+          // which is expected for new users
+        }
+
+        if (profile?.tenant_id) {
+          // Already onboarded — go to dashboard
+          window.location.href = "/dashboard";
+          return;
+        }
+
+        // New user — show onboarding form
+        const name =
+          user.user_metadata?.full_name || user.email?.split("@")[0] || "";
+        setFullName(name);
+        setPageState("ready");
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[onboarding] Unexpected error:", err);
+        setErrorMessage(
+          err instanceof Error
+            ? err.message
+            : "Ett oväntat fel uppstod. Försök ladda om sidan."
+        );
+        setPageState("error");
       }
-
-      // Check if user already has a tenant (already onboarded)
-      const { data: profile } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profile?.tenant_id) {
-        // Already onboarded — go to dashboard
-        window.location.href = "/dashboard";
-        return;
-      }
-
-      // Pre-fill name from auth metadata
-      const name =
-        user.user_metadata?.full_name || user.email?.split("@")[0] || "";
-      setFullName(name);
-      setReady(true);
     }
 
     checkAuth();
+
+    // Timeout: if auth check takes too long, show error
+    const timeout = setTimeout(() => {
+      if (cancelled) return;
+      setPageState((prev) => {
+        if (prev === "loading") {
+          setErrorMessage("Det tog för lång tid att verifiera din session. Försök ladda om sidan.");
+          return "error";
+        }
+        return prev;
+      });
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, []);
 
   async function handleCreateOrg(e: React.FormEvent) {
@@ -241,7 +294,6 @@ export default function OnboardingPage() {
       metadata: { address, city, source: "onboarding" },
     });
 
-    // Full page navigation to avoid any client-side routing issues
     window.location.href = `/assignments/${assignment.id}`;
   }
 
@@ -249,14 +301,89 @@ export default function OnboardingPage() {
     window.location.href = "/dashboard";
   }
 
-  // Show loading while checking auth status
-  if (!ready) {
+  // ─── Page states ───────────────────────────────────────────────
+
+  if (pageState === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/40">
-        <LoadingSpinner size="lg" text="Laddar..." />
+      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+        <Card className="w-full max-w-sm">
+          <CardContent className="flex flex-col items-center gap-3 pt-6 pb-6">
+            <LoadingSpinner size="lg" />
+            <p className="text-sm text-muted-foreground">
+              Verifierar din session...
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
+
+  if (pageState === "no-session") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
+              <LogIn className="h-6 w-6 text-orange-600" />
+            </div>
+            <CardTitle>Ingen aktiv session</CardTitle>
+            <CardDescription>
+              Du behöver logga in eller skapa ett konto för att fortsätta.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => (window.location.href = "/login")}
+            >
+              Logga in
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => (window.location.href = "/register")}
+            >
+              Skapa konto
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === "error") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+              <AlertCircle className="h-6 w-6 text-red-600" />
+            </div>
+            <CardTitle>Något gick fel</CardTitle>
+            <CardDescription>{errorMessage}</CardDescription>
+          </CardHeader>
+          <CardFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => (window.location.href = "/login")}
+            >
+              Gå till login
+            </Button>
+            <Button
+              className="flex-1 gap-2"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Ladda om
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // ─── Onboarding form (pageState === "ready") ──────────────────
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === step);
 

@@ -42,13 +42,13 @@ export async function updateSession(request: NextRequest) {
   const isAuthCallback = pathname.startsWith("/auth/callback");
   const isOnboarding = pathname.startsWith("/onboarding");
 
-  // Helper: redirect with auth cookies preserved
+  // Helper: redirect while preserving ALL cookie data (name, value, AND options)
   function redirectTo(path: string) {
     const url = request.nextUrl.clone();
     url.pathname = path;
     const res = NextResponse.redirect(url);
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      res.cookies.set(cookie.name, cookie.value);
+    supabaseResponse.cookies.getAll().forEach(({ name, value, ...options }) => {
+      res.cookies.set(name, value, options);
     });
     return res;
   }
@@ -63,28 +63,27 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // ----- ONBOARDING: simple auth-only check, NO database queries -----
+  // Auth pages (login/register): ALWAYS allow through.
+  // The pages handle logged-in state themselves via client-side checks.
+  // This prevents redirect chains that cause white pages.
+  if (isAuthPage) {
+    return supabaseResponse;
+  }
+
+  // Onboarding: only require auth, no database queries
   if (isOnboarding) {
     if (!user) {
       return redirectTo("/login");
     }
-    // Logged in → just pass through. The page handles everything client-side.
     return supabaseResponse;
   }
 
-  // ----- NOT LOGGED IN -----
+  // ----- ALL OTHER PROTECTED ROUTES -----
   if (!user) {
-    // Auth pages: allow through
-    if (isAuthPage) {
-      return supabaseResponse;
-    }
-    // Everything else: redirect to login
     return redirectTo("/login");
   }
 
-  // ----- LOGGED IN: check if user has completed onboarding -----
-  // Single DB query used for both auth pages and protected routes
-  let hasProfile = false;
+  // Check if user has completed onboarding
   try {
     const { data: profile } = await supabase
       .from("users")
@@ -92,19 +91,10 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    hasProfile = !!profile?.tenant_id;
+    if (!profile?.tenant_id) {
+      return redirectTo("/onboarding");
+    }
   } catch {
-    // DB query failed — assume not onboarded
-    hasProfile = false;
-  }
-
-  // Auth pages (login/register): redirect logged-in users to the right place
-  if (isAuthPage) {
-    return redirectTo(hasProfile ? "/dashboard" : "/onboarding");
-  }
-
-  // Protected routes: ensure user has completed onboarding
-  if (!hasProfile) {
     return redirectTo("/onboarding");
   }
 

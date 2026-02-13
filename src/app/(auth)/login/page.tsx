@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,6 @@ import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +45,9 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
+    // Full page navigation — not router.push() — to avoid broken state
+    // when middleware redirects /dashboard → /onboarding during CSR
+    window.location.href = "/dashboard";
   }
 
   return (

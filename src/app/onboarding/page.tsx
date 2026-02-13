@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { createAuditLog } from "@/lib/audit/log";
 import { Button } from "@/components/ui/button";
@@ -29,14 +28,18 @@ import {
 
 type Step = "org" | "profile" | "first-assignment";
 
-const STEPS: { id: Step; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const STEPS: {
+  id: Step;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
   { id: "org", label: "Organisation", icon: Building2 },
   { id: "profile", label: "Din profil", icon: User },
   { id: "first-assignment", label: "Första uppdraget", icon: FileText },
 ];
 
 export default function OnboardingPage() {
-  const router = useRouter();
+  const [ready, setReady] = useState(false);
   const [step, setStep] = useState<Step>("org");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -55,6 +58,44 @@ export default function OnboardingPage() {
   // Internal state
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Client-side auth + tenant check on mount
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function checkAuth() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        // Not authenticated — go to login
+        window.location.href = "/login";
+        return;
+      }
+
+      // Check if user already has a tenant (already onboarded)
+      const { data: profile } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile?.tenant_id) {
+        // Already onboarded — go to dashboard
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      // Pre-fill name from auth metadata
+      const name =
+        user.user_metadata?.full_name || user.email?.split("@")[0] || "";
+      setFullName(name);
+      setReady(true);
+    }
+
+    checkAuth();
+  }, []);
 
   async function handleCreateOrg(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +121,6 @@ export default function OnboardingPage() {
       .replace(/^-|-$/g, "");
 
     // Generate tenant ID client-side to avoid needing a SELECT policy
-    // (auth.tenant_id() returns NULL before user row exists, so .select() fails)
     const newTenantId = crypto.randomUUID();
 
     const { error: tenantError } = await supabase
@@ -93,19 +133,18 @@ export default function OnboardingPage() {
       return;
     }
 
-    // Pre-fill name from auth metadata
-    const name =
-      user.user_metadata?.full_name || user.email?.split("@")[0] || "";
+    const name = fullName || user.user_metadata?.full_name || "Användare";
 
     const { error: userError } = await supabase.from("users").insert({
       id: user.id,
       tenant_id: newTenantId,
       role: "admin",
-      full_name: name || "Användare",
+      full_name: name,
       email: user.email!,
     });
 
     if (userError) {
+      // Rollback tenant if user creation fails
       await supabase.from("tenants").delete().eq("id", newTenantId);
       setError("Kunde inte skapa användarprofil: " + userError.message);
       setLoading(false);
@@ -113,7 +152,9 @@ export default function OnboardingPage() {
     }
 
     // Create defaults (user row now exists, so auth.tenant_id() works)
-    await supabase.from("tenant_preferences").insert({ tenant_id: newTenantId });
+    await supabase
+      .from("tenant_preferences")
+      .insert({ tenant_id: newTenantId });
 
     const token = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
     await supabase.from("inbound_aliases").insert({
@@ -133,7 +174,6 @@ export default function OnboardingPage() {
 
     setTenantId(newTenantId);
     setUserId(user.id);
-    setFullName(name);
     setLoading(false);
     setStep("profile");
   }
@@ -201,14 +241,21 @@ export default function OnboardingPage() {
       metadata: { address, city, source: "onboarding" },
     });
 
-    setLoading(false);
-    router.push(`/assignments/${assignment.id}`);
-    router.refresh();
+    // Full page navigation to avoid any client-side routing issues
+    window.location.href = `/assignments/${assignment.id}`;
   }
 
   function handleSkip() {
-    router.push("/dashboard");
-    router.refresh();
+    window.location.href = "/dashboard";
+  }
+
+  // Show loading while checking auth status
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/40">
+        <LoadingSpinner size="lg" text="Laddar..." />
+      </div>
+    );
   }
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === step);
@@ -298,7 +345,11 @@ export default function OnboardingPage() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full gap-2" disabled={loading}>
+                <Button
+                  type="submit"
+                  className="w-full gap-2"
+                  disabled={loading}
+                >
                   {loading ? (
                     <LoadingSpinner size="sm" text="Skapar..." />
                   ) : (
@@ -367,7 +418,11 @@ export default function OnboardingPage() {
                 >
                   Hoppa över
                 </Button>
-                <Button type="submit" className="flex-1 gap-2" disabled={loading}>
+                <Button
+                  type="submit"
+                  className="flex-1 gap-2"
+                  disabled={loading}
+                >
                   {loading ? (
                     <LoadingSpinner size="sm" text="Sparar..." />
                   ) : (
@@ -389,7 +444,9 @@ export default function OnboardingPage() {
               <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                 <FileText className="h-6 w-6 text-primary" />
               </div>
-              <CardTitle className="text-xl">Skapa ditt första uppdrag</CardTitle>
+              <CardTitle className="text-xl">
+                Skapa ditt första uppdrag
+              </CardTitle>
               <CardDescription>
                 Ange adressen för att komma igång direkt, eller gå till
                 dashboarden.
@@ -438,7 +495,11 @@ export default function OnboardingPage() {
                 >
                   Gå till dashboard
                 </Button>
-                <Button type="submit" className="flex-1 gap-2" disabled={loading}>
+                <Button
+                  type="submit"
+                  className="flex-1 gap-2"
+                  disabled={loading}
+                >
                   {loading ? (
                     <LoadingSpinner size="sm" text="Skapar..." />
                   ) : (

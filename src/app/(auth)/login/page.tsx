@@ -30,7 +30,7 @@ export default function LoginPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -45,9 +45,19 @@ export default function LoginPage() {
       return;
     }
 
-    // Full page navigation — not router.push() — to avoid broken state
-    // when middleware redirects /dashboard → /onboarding during CSR
-    window.location.href = "/dashboard";
+    // Check client-side if user has completed onboarding
+    // This avoids depending on middleware DB queries + redirect chains
+    const { data: profile } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (profile?.tenant_id) {
+      window.location.href = "/dashboard";
+    } else {
+      window.location.href = "/onboarding";
+    }
   }
 
   return (
